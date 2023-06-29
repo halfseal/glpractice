@@ -3,9 +3,12 @@
 #include "glm/glm/glm.hpp"
 #include "glm/glm/gtc/matrix_transform.hpp"
 #include "glm/glm/gtc/type_ptr.hpp"
-#include "shader.h"
-#include "camera.h"
-#include "object.h"
+#define STB_TRUETYPE_IMPLEMENTATION
+#include "stb_truetype.h"
+
+#include "source/shader.h"
+#include "source/camera.h"
+#include "source/object.h"
 
 #include <iostream>
 #include <unordered_map>
@@ -33,7 +36,7 @@ Camera camera(glm::vec3(0.0f, 0.0f, 3.0f));
 Point *pointcloud = nullptr;
 Box *box = nullptr;
 
-const float VOXELSIZE = 0.5f;
+const float VOXELSIZE = 1.0f;
 
 // timing
 float deltaTime = 0.0f;
@@ -81,7 +84,7 @@ int main()
     Shader shader("shader/main_vert.glsl", "shader/main_frag.glsl");
 
     std::vector<glm::vec3> vertices;
-    readVerticesFromFile("pointcloud1.txt", vertices);
+    readVerticesFromFile("assests/pointcloud1.txt", vertices);
     pointcloud = new Point(vertices);
 
     // render loop
@@ -101,7 +104,7 @@ int main()
 
         // render
         // ------
-        glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+        glClearColor(0.1f, 0.2f, 0.3f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         // activate shader
@@ -119,22 +122,23 @@ int main()
         glm::mat4 model = glm::mat4(1.0f);
         shader.setMat4("model", model);
 
-        // if (box != nullptr)
-        // {
-        //     for (const auto &pos : pointcloud->Positions)
-        //     {
-        //         model = glm::mat4(1.0f);
-        //         model = glm::translate(model, pos);
-        //         model = glm::scale(model, glm::vec3(VOXELSIZE / 2.0f));
-        //         shader.setMat4("model", model);
+        if (box != nullptr)
+        {
+            for (const auto &pos : pointcloud->Positions)
+            {
+                model = glm::mat4(1.0f);
+                model = glm::translate(model, pos);
+                model = glm::scale(model, glm::vec3(VOXELSIZE / 2.0f));
+                shader.setMat4("model", model);
 
-        //         box->DrawFill();
-        //         shader.setBool("isBlackMode", true);
-        //         box->DrawLine();
-        //         shader.setBool("isBlackMode", false);
-        //     }
-        // }
-        // else
+                box->DrawFill();
+                shader.setBool("isBlackMode", true);
+                box->DrawLine();
+                shader.setBool("isBlackMode", false);
+            }
+        }
+        else
+
             pointcloud->Draw();
 
         // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
@@ -149,7 +153,8 @@ int main()
     return 0;
 }
 
-void showInstructions(){
+void showInstructions()
+{
     printf("Click and Drag to Loock Around.\n");
     printf("Press 'W/A/S/D/Up/Down' to Move.\n");
     printf("Press 'Q/Esc' to quit.\n");
@@ -260,24 +265,26 @@ void downsample(std::vector<glm::vec3> &vertices, const float gridSize)
         return;
     isDownsapled = true;
 
-    glm::vec3 min = glm::vec3(FLT_MAX, FLT_MAX, FLT_MAX);
-    glm::vec3 max = glm::vec3(FLT_MIN, FLT_MIN, FLT_MIN);
-    for (const auto &vertex : vertices)
-    {
-        if (vertex.x < min.x)
-            min.x = vertex.x;
-        if (vertex.y < min.y)
-            min.y = vertex.y;
-        if (vertex.z < min.z)
-            min.z = vertex.z;
+    /*
+        glm::vec3 min = glm::vec3(FLT_MAX, FLT_MAX, FLT_MAX);
+        glm::vec3 max = glm::vec3(FLT_MIN, FLT_MIN, FLT_MIN);
+        for (const auto &vertex : vertices)
+        {
+            if (vertex.x < min.x)
+                min.x = vertex.x;
+            if (vertex.y < min.y)
+                min.y = vertex.y;
+            if (vertex.z < min.z)
+                min.z = vertex.z;
 
-        if (vertex.x > max.x)
-            max.x = vertex.x;
-        if (vertex.y > max.y)
-            max.y = vertex.y;
-        if (vertex.z > max.z)
-            max.z = vertex.z;
-    }
+            if (vertex.x > max.x)
+                max.x = vertex.x;
+            if (vertex.y > max.y)
+                max.y = vertex.y;
+            if (vertex.z > max.z)
+                max.z = vertex.z;
+        }
+    */
 
     auto combinedData = [](int _x, int _y, int _z) -> unsigned long long
     {
@@ -299,6 +306,7 @@ void downsample(std::vector<glm::vec3> &vertices, const float gridSize)
         int x = static_cast<int>(fx);
         int y = static_cast<int>(fy);
         int z = static_cast<int>(fz);
+
         auto combined = combinedData(x, y, z);
 
         auto it = map.find(combined);
@@ -309,8 +317,10 @@ void downsample(std::vector<glm::vec3> &vertices, const float gridSize)
                 fz * gridSize + gridSize / 2.0f));
     }
 
+    printf("number of points :\t%ld\n", vertices.size());
     vertices.clear();
     vertices.reserve(map.size());
     for (const auto &entry : map)
         vertices.push_back(entry.second);
+    printf("number of voxel :\t%ld\n", vertices.size());
 }
