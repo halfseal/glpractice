@@ -98,6 +98,24 @@ public:
         insert(node->Children[code], point);
     }
 
+    void findByY(OctreeNode* node, float z, std::vector<glm::vec3>& points) {
+        if (node == nullptr)
+            return;
+
+        if (z < node->c.y - node->l * 1.0f || node->c.y + node->l * 1.0f < z)
+            return;
+
+        if (node->Depth >= MaxDepth) {
+            // std::cout << "Point: (" << node->c.x << ", " << node->c.y << ", " << node->c.z << ")" << std::endl;
+            points.push_back(node->c);
+        }
+        else {
+            for (int i = 0; i < 8; i++) {
+                findByY(node->Children[i], z, points);
+            }
+        }
+    }
+
     void printAll(OctreeNode* node) {
         if (node == nullptr)
             return;

@@ -24,6 +24,8 @@ void processInput(GLFWwindow* window);
 void readVerticesFromFile(const std::string& filename, std::vector<glm::vec3>& vertices);
 void downsample(std::vector<glm::vec3>& vertices, const float gridSize);
 
+unsigned long long makeUniqueNumber(glm::vec3 vertex, const float boxSize);
+
 // settings
 const unsigned int SCR_WIDTH = 1280; // 800;
 const unsigned int SCR_HEIGHT = 780; // 600;
@@ -35,7 +37,7 @@ Camera camera(glm::vec3(0.0f, 0.0f, 3.0f));
 Point* pointcloud = nullptr;
 Box* box = nullptr;
 
-const float VOXELSIZE = 0.5f;
+const float VOXELSIZE = 0.25f;
 
 // timing
 float deltaTime = 0.0f;
@@ -123,20 +125,44 @@ int main()
         shader.setMat4("model", model);
 
         if (box != nullptr) {
-            for (const auto& pos : pointcloud->Positions) {
+            std::vector<glm::vec3> cboxvec;
+            octree.findByY(octree.getRoot(), camera.Position.y, cboxvec);
+            std::unordered_map<unsigned long long, bool> cboxmap;
+
+            for (const auto& pos : cboxvec) {
+                cboxmap[makeUniqueNumber(pos, VOXELSIZE)] = true;
+
                 model = glm::mat4(1.0f);
                 model = glm::translate(model, pos);
                 model = glm::scale(model, glm::vec3(VOXELSIZE / 2.0f));
                 shader.setMat4("model", model);
 
+                shader.setVec4("color", glm::vec4(229.0f / 255.0f, 83.0f / 255.0f, 0.0f, 1.0f));
                 box->DrawFill();
-                shader.setBool("isBlackMode", true);
+                shader.setVec4("color", glm::vec4(0.0f));
                 box->DrawLine();
-                shader.setBool("isBlackMode", false);
             }
+            for (const auto& pos : pointcloud->Positions) {
+                if (cboxmap.find(makeUniqueNumber(pos, VOXELSIZE)) != cboxmap.end()) {
+                    continue;
+                }
+
+                model = glm::mat4(1.0f);
+                model = glm::translate(model, pos);
+                model = glm::scale(model, glm::vec3(VOXELSIZE / 2.0f));
+                shader.setMat4("model", model);
+
+                shader.setVec4("color", glm::vec4(1.0f));
+                box->DrawFill();
+                shader.setVec4("color", glm::vec4(0.0f));
+                box->DrawLine();
+            }
+
         }
-        else
+        else {
+            shader.setVec4("color", glm::vec4(1.0f));
             pointcloud->Draw();
+        }
 
 
         // printf("z : %f\n", camera.Position.y);
@@ -279,16 +305,16 @@ void downsample(std::vector<glm::vec3>& vertices, const float gridSize)
         }
     */
 
-    auto combinedData = [](int _x, int _y, int _z) -> unsigned long long
-        {
-            unsigned long long x = static_cast<unsigned long long>(_x);
-            unsigned long long y = static_cast<unsigned long long>(_y);
-            unsigned long long z = static_cast<unsigned long long>(_z);
-            unsigned long long combined = (x << 42) | (y << 21) | z;
-            return combined;
-        };
+    // auto combinedData = [](int _x, int _y, int _z) -> unsigned long long
+    //     {
+    //         unsigned long long x = static_cast<unsigned long long>(_x);
+    //         unsigned long long y = static_cast<unsigned long long>(_y);
+    //         unsigned long long z = static_cast<unsigned long long>(_z);
+    //         unsigned long long combined = (x << 42) | (y << 21) | z;
+    //         return combined;
+    //     };
 
-    std::unordered_map<unsigned long long, glm::vec3> map;
+    // std::unordered_map<unsigned long long, glm::vec3> map;
 
     for (const auto& vertex : vertices) {
         // if (vertex.z >= 299.99) continue;
@@ -332,4 +358,21 @@ void downsample(std::vector<glm::vec3>& vertices, const float gridSize)
     vertices.reserve(ocvec.size());
     for (const auto& o : ocvec)
         vertices.push_back(o);
+}
+
+unsigned long long makeUniqueNumber(glm::vec3 vertex, const float boxSize) {
+    float fx = floor(vertex.x / boxSize);
+    float fy = floor(vertex.y / boxSize);
+    float fz = floor(vertex.z / boxSize);
+
+    int _x = static_cast<int>(fx);
+    int _y = static_cast<int>(fy);
+    int _z = static_cast<int>(fz);
+
+    unsigned long long x = static_cast<unsigned long long>(_x);
+    unsigned long long y = static_cast<unsigned long long>(_y);
+    unsigned long long z = static_cast<unsigned long long>(_z);
+    unsigned long long combined = (x << 42) | (y << 21) | z;
+
+    return combined;
 }
