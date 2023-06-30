@@ -106,8 +106,7 @@ public:
         if (!this->IsClicked)
             return;
 
-        if (this->FirstMouse)
-        {
+        if (this->FirstMouse) {
             this->LastX = xpos;
             this->LastY = ypos;
             this->FirstMouse = false;
