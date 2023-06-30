@@ -138,7 +138,7 @@ int main()
         else
             pointcloud->Draw();
 
-        printf("z : %f\n", camera.Position.y);
+        // printf("z : %f\n", camera.Position.y);
 
         // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
         // -------------------------------------------------------------------------------
