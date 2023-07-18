@@ -1,0 +1,2 @@
+Invoking command in '/home/sp/Desktop/glpractice/build/glm': /usr/bin/cmake /home/sp/Desktop/glpractice/glm -DCMAKE_INSTALL_PREFIX=/home/sp/Desktop/glpractice/install/glm
+Invoked command in '/home/sp/Desktop/glpractice/build/glm' returned '1': /usr/bin/cmake /home/sp/Desktop/glpractice/glm -DCMAKE_INSTALL_PREFIX=/home/sp/Desktop/glpractice/install/glm

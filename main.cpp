@@ -3,6 +3,7 @@
 #include "glm/glm/glm.hpp"
 #include "glm/glm/gtc/matrix_transform.hpp"
 #include "glm/glm/gtc/type_ptr.hpp"
+#include "glm/glm/gtx/norm.hpp"
 
 #include "source/shader.h"
 #include "source/camera.h"
@@ -23,6 +24,7 @@ void processInput(GLFWwindow* window);
 
 void readVerticesFromFile(const std::string& filename, std::vector<glm::vec3>& vertices);
 void downsample(std::vector<glm::vec3>& vertices, const float gridSize);
+void summarize(glm::vec3& mypos, std::vector<glm::vec3>& boxvec, std::vector<glm::vec3>& filteredboxvec);
 
 unsigned long long makeUniqueNumber(glm::vec3 vertex, const float boxSize);
 
@@ -31,7 +33,7 @@ const unsigned int SCR_WIDTH = 1280; // 800;
 const unsigned int SCR_HEIGHT = 780; // 600;
 
 // camera
-Camera camera(glm::vec3(0.0f, 0.0f, 3.0f));
+Camera camera;
 // Camera camera(glm::vec3(0.0f, 60.0f, 25.0f), glm::vec3(0.0f, 1.0f, 0.0f), 00.0f, -89.0f);
 
 Point* pointcloud = nullptr;
@@ -39,11 +41,17 @@ Box* box = nullptr;
 
 const float VOXELSIZE = 0.25f;
 
+bool isDownsapled = false;
+bool isSummarized = false;
+
 // timing
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
 
 Octree octree(VOXELSIZE, 512.0f);
+
+std::vector<glm::vec3> backupboxvec;
+std::vector<glm::vec3> filteredvec;
 
 int main()
 {
@@ -78,86 +86,86 @@ int main()
         return -1;
     }
 
-    // configure global opengl state
-    // -----------------------------
     glEnable(GL_DEPTH_TEST);
 
-    // build and compile our shader zprogram
-    // ------------------------------------
     Shader shader("shaders/main_vert.glsl", "shaders/main_frag.glsl");
 
     std::vector<glm::vec3> vertices;
-    readVerticesFromFile("assests/pointcloud1.txt", vertices);
+    readVerticesFromFile("/home/sp/robot_ws/output1.txt", vertices);
     pointcloud = new Point(vertices);
 
-    // render loop
-    // -----------
     while (!glfwWindowShouldClose(window)) {
-        // printf("camerapos : %f, %f, %f,\tyaw: %f,\tpitch: %f\n", camera.Position.x, camera.Position.y, camera.Position.z, camera.Yaw, camera.Pitch);
-        // per-frame time logic
-        // --------------------
+
         float currentFrame = static_cast<float>(glfwGetTime());
         deltaTime = currentFrame - lastFrame;
         lastFrame = currentFrame;
 
-        // input
-        // -----
+        std::cout << "camera : " << camera.Position.x << ", " << camera.Position.y << ", " << camera.Position.z << std::endl;
         processInput(window);
 
-        // render
-        // ------
         glClearColor(0.1f, 0.2f, 0.3f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        // activate shader
         shader.use();
 
-        // pass projection matrix to shader (note that in this case it could change every frame)
         glm::mat4 projection = glm::perspective(glm::radians(camera.Zoom), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 100.0f);
         shader.setMat4("projection", projection);
 
-        // camera/view transformation
         glm::mat4 view = camera.GetViewMatrix();
         shader.setMat4("view", view);
 
-        // model transformation
         glm::mat4 model = glm::mat4(1.0f);
         shader.setMat4("model", model);
 
         if (box != nullptr) {
-            std::vector<glm::vec3> cboxvec;
-            octree.findByY(octree.getRoot(), camera.Position.y, cboxvec);
-            std::unordered_map<unsigned long long, bool> cboxmap;
+            if (isSummarized) {
+                for (const auto& pos : filteredvec) {
+                    model = glm::mat4(1.0f);
+                    model = glm::translate(model, pos);
+                    model = glm::scale(model, glm::vec3(VOXELSIZE / 2.0f));
+                    shader.setMat4("model", model);
 
-            for (const auto& pos : cboxvec) {
-                cboxmap[makeUniqueNumber(pos, VOXELSIZE)] = true;
-
-                model = glm::mat4(1.0f);
-                model = glm::translate(model, pos);
-                model = glm::scale(model, glm::vec3(VOXELSIZE / 2.0f));
-                shader.setMat4("model", model);
-
-                shader.setVec4("color", glm::vec4(229.0f / 255.0f, 83.0f / 255.0f, 0.0f, 1.0f));
-                box->DrawFill();
-                shader.setVec4("color", glm::vec4(0.0f));
-                box->DrawLine();
-            }
-            for (const auto& pos : pointcloud->Positions) {
-                if (cboxmap.find(makeUniqueNumber(pos, VOXELSIZE)) != cboxmap.end()) {
-                    continue;
+                    shader.setVec4("color", glm::vec4(229.0f / 255.0f, 83.0f / 255.0f, 0.0f, 1.0f));
+                    box->DrawFill();
+                    shader.setVec4("color", glm::vec4(0.0f));
+                    box->DrawLine();
                 }
-
-                model = glm::mat4(1.0f);
-                model = glm::translate(model, pos);
-                model = glm::scale(model, glm::vec3(VOXELSIZE / 2.0f));
-                shader.setMat4("model", model);
-
-                shader.setVec4("color", glm::vec4(1.0f));
-                box->DrawFill();
-                shader.setVec4("color", glm::vec4(0.0f));
-                box->DrawLine();
             }
+            else {
+                std::vector<glm::vec3> cboxvec;
+                octree.findByY(octree.getRoot(), camera.Position.y, cboxvec);
+                backupboxvec = cboxvec;
+                std::unordered_map<unsigned long long, bool> cboxmap;
 
+                for (const auto& pos : cboxvec) {
+                    cboxmap[makeUniqueNumber(pos, VOXELSIZE)] = true;
+
+                    model = glm::mat4(1.0f);
+                    model = glm::translate(model, pos);
+                    model = glm::scale(model, glm::vec3(VOXELSIZE / 2.0f));
+                    shader.setMat4("model", model);
+
+                    shader.setVec4("color", glm::vec4(229.0f / 255.0f, 83.0f / 255.0f, 0.0f, 1.0f));
+                    box->DrawFill();
+                    shader.setVec4("color", glm::vec4(0.0f));
+                    box->DrawLine();
+                }
+                for (const auto& pos : pointcloud->Positions) {
+                    if (cboxmap.find(makeUniqueNumber(pos, VOXELSIZE)) != cboxmap.end()) {
+                        continue;
+                    }
+
+                    model = glm::mat4(1.0f);
+                    model = glm::translate(model, pos);
+                    model = glm::scale(model, glm::vec3(VOXELSIZE / 2.0f));
+                    shader.setMat4("model", model);
+
+                    shader.setVec4("color", glm::vec4(1.0f));
+                    box->DrawFill();
+                    shader.setVec4("color", glm::vec4(0.0f));
+                    box->DrawLine();
+                }
+            }
         }
         else {
             shader.setVec4("color", glm::vec4(1.0f));
@@ -212,6 +220,16 @@ void processInput(GLFWwindow* window)
         downsample(pointcloud->Positions, VOXELSIZE);
         pointcloud->Refresh();
         box = new Box();
+    }
+    if (glfwGetKey(window, GLFW_KEY_1) == GLFW_PRESS) {
+        if (isDownsapled) {
+            isSummarized = true;
+            summarize(camera.Position, backupboxvec, filteredvec);
+        }
+    }
+    if (glfwGetKey(window, GLFW_KEY_2) == GLFW_PRESS) {
+        if (isDownsapled)
+            isSummarized = false;
     }
 }
 
@@ -277,7 +295,6 @@ void readVerticesFromFile(const std::string& filename, std::vector<glm::vec3>& v
     file.close();
 }
 
-bool isDownsapled = false;
 void downsample(std::vector<glm::vec3>& vertices, const float gridSize)
 {
     if (isDownsapled)
@@ -358,6 +375,22 @@ void downsample(std::vector<glm::vec3>& vertices, const float gridSize)
     vertices.reserve(ocvec.size());
     for (const auto& o : ocvec)
         vertices.push_back(o);
+}
+
+void summarize(glm::vec3& mypos, std::vector<glm::vec3>& boxvec, std::vector<glm::vec3>& filteredvec) {
+    filteredvec.clear();
+    auto mypos2 = glm::vec2(mypos.x, mypos.z);
+
+    for (const auto& boxpos : boxvec) {
+        std::unordered_map<long long, glm::vec2> polarmap;
+
+        auto boxpos2 = glm::vec2(boxpos.x, boxpos.z);
+        auto diff = boxpos2 - mypos2;
+        float ftheta = atan2(diff.y, diff.x);
+        long long lltheta = static_cast<long long>(ftheta * 10000.0f);
+
+        polarmap[lltheta] = boxpos2;
+    }
 }
 
 unsigned long long makeUniqueNumber(glm::vec3 vertex, const float boxSize) {
